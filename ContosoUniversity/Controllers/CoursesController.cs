@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
 using ContosoUniversity.Data;
 using ContosoUniversity.Models;
+using Microsoft.Data.SqlClient;
 
 namespace ContosoUniversity.Controllers
 {
@@ -236,5 +237,20 @@ namespace ContosoUniversity.Controllers
         {
             return _context.Courses.Any(e => e.CourseID == id);
         }
+
+        public IActionResult UpdateCourseCredits()
+        {
+            return View();
+        }
+        //[HttpPost]
+        //public async Task<IActionResult> UpdateCourseCredits(int? multiplier)
+        //{
+        //    if (multiplier != null)
+        //    {
+        //        ViewData["RowsAffected"] =
+        //            await _context.Database.ExecuteSqlInterpolated($"UPDATE Course SET Credits = Credits * {0}", multiplier);
+        //    }
+        //    return View();
+        //}
     }
 }

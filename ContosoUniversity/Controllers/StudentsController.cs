@@ -7,16 +7,19 @@ using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
 using ContosoUniversity.Data;
 using ContosoUniversity.Models;
+using Microsoft.Extensions.Logging;
 
 namespace ContosoUniversity.Controllers
 {
     public class StudentsController : Controller
     {
         private readonly SchoolContext _context;
+        private readonly ILogger<StudentsController> _logger;
 
-        public StudentsController(SchoolContext context)
+        public StudentsController(SchoolContext context,ILogger<StudentsController> logger)
         {
             _context = context;
+            _logger = logger;
         }
 
         // GET: Students
@@ -114,21 +117,23 @@ namespace ContosoUniversity.Controllers
         public async Task<IActionResult> Create(
             [Bind("EnrollmentDate,FirstMidName,LastName")] Student student)
         {
+
             try
             {
                 if (ModelState.IsValid)
                 {
+                    var newStudent = student;
+                    _logger.LogInformation(message: "We are about to add this person: "+ student.FullName + " Enrollment date: " + student.EnrollmentDate );
                     _context.Add(student);
                     await _context.SaveChangesAsync();
                     return RedirectToAction(nameof(Index));
                 }
             }
-            catch (DbUpdateException /* ex */)
+            catch (DbUpdateException ex )
             {
                 //Log the error (uncomment ex variable name and write a log.
-                ModelState.AddModelError("", "Unable to save changes. " +
-                    "Try again, and if the problem persists " +
-                    "destroy your computer.");
+                _logger.LogError(message: "Unable to save changes. It Ocurred an error. Details:" + ex);
+                ModelState.AddModelError("", "Unable to save changes. " + "Try again, and if the problem persists " + "destroy your computer.");
             }
             return View(student);
         }
@@ -149,6 +154,26 @@ namespace ContosoUniversity.Controllers
             return View(student);
         }
 
+        private string GetChanges(Student Old,Student New)
+        {
+            string changesLogScript = "A row with the Id #" + Old.ID.ToString() + " from the 'Students' table was modified on " + DateTime.Now + "; The following fields were modified: ";
+           
+            var propsOld = Old.GetType().GetProperties();
+            var propsNew = New.GetType().GetProperties();
+
+            for (int i = 1; i < propsOld.Count(); i++)
+            {
+                
+                var oldVal = propsOld[i].GetValue(Old, null);
+                var newVal = propsNew[i].GetValue(New, null);
+                
+                if(oldVal == null || newVal == null || propsOld[i].Name == "FullName"){continue; }//skips if its either null or the calculated field "FullName".
+
+                if (oldVal.ToString() != newVal.ToString()){ changesLogScript += "'" + propsOld[i].Name + "' : from  " + oldVal + " to " + newVal + "; "; }
+            }
+
+            return changesLogScript;
+        }
         // POST: Students/Edit/5
         // To protect from overposting attacks, enable the specific properties you want to bind to.
         // For more details, see http://go.microsoft.com/fwlink/?LinkId=317598.
@@ -158,9 +183,14 @@ namespace ContosoUniversity.Controllers
         {
             if (id == null)
             {
+                _logger.LogError("Not such student with that id");
                 return NotFound();
             }
+            
             var studentToUpdate = await _context.Students.FirstOrDefaultAsync(s => s.ID == id);
+            //We make a copy of the old version before doing the update
+            Student oldVersionStudent = new Student { ID = studentToUpdate.ID,FirstMidName = studentToUpdate.FirstMidName, LastName = studentToUpdate.LastName, EnrollmentDate = studentToUpdate.EnrollmentDate };
+
             if (await TryUpdateModelAsync<Student>(
                 studentToUpdate,
                 "",
@@ -169,14 +199,13 @@ namespace ContosoUniversity.Controllers
                 try
                 {
                     await _context.SaveChangesAsync();
+                    _logger.LogInformation(GetChanges(oldVersionStudent, studentToUpdate));
                     return RedirectToAction(nameof(Index));
                 }
-                catch (DbUpdateException /* ex */)
+                catch (DbUpdateException ex)
                 {
-                    //Log the error (uncomment ex variable name and write a log.)
-                    ModelState.AddModelError("", "Unable to save changes. " +
-                        "Try again, and if the problem persists, " +
-                        "burn your pc.");
+                    _logger.LogError("Unable to save student changes, see details: " + ex);
+                    ModelState.AddModelError("", "Unable to save changes. " + "Try again, and if the problem persists, " + "burn your pc.");
                 }
             }
             return View(studentToUpdate);
@@ -187,12 +216,14 @@ namespace ContosoUniversity.Controllers
         {
             if (id == null)
             {
+                _logger.LogError("Not such student with that id");
                 return NotFound();
             }
 
             var student = await _context.Students
                 .AsNoTracking()
                 .FirstOrDefaultAsync(m => m.ID == id);
+
             if (student == null)
             {
                 return NotFound();
@@ -214,6 +245,8 @@ namespace ContosoUniversity.Controllers
         public async Task<IActionResult> DeleteConfirmed(int id)
         {
             var student = await _context.Students.FindAsync(id);
+            //Student oldVersionStudent = new Student { ID = student.ID,FirstMidName = student.FirstMidName, LastName = student.LastName, EnrollmentDate = student.EnrollmentDate };
+
             if (student == null)
             {
                 return RedirectToAction(nameof(Index));
@@ -221,13 +254,14 @@ namespace ContosoUniversity.Controllers
 
             try
             {
+                _logger.LogInformation("Deleting row #" + student.ID +" from 'Students' table. The student name is: " + student.FullName + " and this row is being deleted on " + DateTime.Now);
                 _context.Students.Remove(student);
                 await _context.SaveChangesAsync();
                 return RedirectToAction(nameof(Index));
             }
-            catch (DbUpdateException /* ex */)
+            catch (DbUpdateException ex )
             {
-                //Log the error (uncomment ex variable name and write a log.)
+                _logger.LogError("Unable to delete, see details: " + ex);
                 return RedirectToAction(nameof(Delete), new { id = id, saveChangesError = true });
             }
         }
